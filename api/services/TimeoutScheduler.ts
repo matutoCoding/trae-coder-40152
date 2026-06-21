@@ -68,8 +68,9 @@ export class TimeoutScheduler {
     );
 
     for (const reservation of pendingReservations) {
-      const createdAt = new Date(reservation.createdAt).getTime();
-      const isTimeout = now - createdAt > timeoutMs;
+      const startAt = new Date(reservation.startTime).getTime();
+      const deadline = startAt + timeoutMs;
+      const isTimeout = now > deadline;
 
       if (!isTimeout) {
         continue;
@@ -77,6 +78,16 @@ export class TimeoutScheduler {
 
       reservation.status = 'timeout';
       timeoutIds.push(reservation.id);
+
+      if (reservation.workerIds?.length) {
+        for (const wid of reservation.workerIds) {
+          const worker = this.store.workers.find((w) => w.id === wid);
+          if (worker && worker.status === 'busy') {
+            worker.status = 'idle';
+            this.store.emit('workers:change', worker);
+          }
+        }
+      }
 
       const releaseResult = await this.quotaService.releaseQuota(
         reservation.shipperId,

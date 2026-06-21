@@ -35,11 +35,11 @@ export default function Quota() {
   };
 
   const handleSaveEdit = async (shipper: Shipper) => {
-    if (editValue < shipper.usedQuota + shipper.frozenQuota) {
+    if (editValue < shipper.used + shipper.frozen) {
       pushNotification({
         type: 'warning',
         title: '额度设置过低',
-        message: `总额度不能低于已用+冻结 (${shipper.usedQuota + shipper.frozenQuota})`
+        message: `总额度不能低于已用+冻结 (${shipper.used + shipper.frozen})`
       });
       return;
     }
@@ -178,7 +178,7 @@ export default function Quota() {
                   {(() => {
                     let cumulativePercent = 0;
                     const rings = shippers.map((s, i) => {
-                      const percent = (s.usedQuota + s.frozenQuota) / quotaOverview.totalQuota * 100;
+                      const percent = (s.used + s.frozen) / quotaOverview.totalQuota * 100;
                       const strokeDasharray = `${percent} ${100 - percent}`;
                       const strokeDashoffset = -cumulativePercent;
                       cumulativePercent += percent;
@@ -198,7 +198,7 @@ export default function Quota() {
                         />
                       );
                     });
-                    const unusedPercent = 100 - (shippers.reduce((acc, s) => acc + s.usedQuota + s.frozenQuota, 0) / quotaOverview.totalQuota * 100);
+                    const unusedPercent = 100 - (shippers.reduce((acc, s) => acc + s.used + s.frozen, 0) / quotaOverview.totalQuota * 100);
                     if (unusedPercent > 0) {
                       rings.push(
                         <circle
@@ -231,7 +231,7 @@ export default function Quota() {
                     <span className={cn('w-3 h-3 rounded-full flex-shrink-0', barColors[i % barColors.length])} />
                     <span className="text-xs text-neutral-600 flex-1 truncate">{s.name}</span>
                     <span className="text-xs font-medium text-neutral-800">
-                      {s.usedQuota + s.frozenQuota}
+                      {s.used + s.frozen}
                     </span>
                   </div>
                 ))}
@@ -261,9 +261,8 @@ export default function Quota() {
             </thead>
             <tbody className="divide-y divide-neutral-100">
               {shippers.map(shipper => {
-                const used = shipper.usedQuota + shipper.frozenQuota;
-                const remaining = shipper.quota - used;
-                const usageRate = shipper.quota > 0 ? (used / shipper.quota) * 100 : 0;
+                const used = shipper.used + shipper.frozen;
+                const usageRate = shipper.quota > 0 ? Math.round((used / shipper.quota) * 100) : 0;
                 const isEditing = editingId === shipper.id;
                 return (
                   <tr key={shipper.id} className="hover:bg-neutral-50 transition-colors">
@@ -289,13 +288,13 @@ export default function Quota() {
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className="text-danger">{shipper.usedQuota}</span>
+                      <span className="text-danger">{shipper.used}</span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span style={{ color: '#c9972b' }}>{shipper.frozenQuota}</span>
+                      <span style={{ color: '#c9972b' }}>{shipper.frozen}</span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className="font-medium text-success">{remaining}</span>
+                      <span className="font-medium text-success">{shipper.available}</span>
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2">
@@ -303,15 +302,14 @@ export default function Quota() {
                           <div
                             className={cn(
                               'h-full rounded-full transition-all duration-500',
-                              usageRate >= 90 ? 'bg-danger' :
-                              usageRate >= 70 ? 'bg-accent-500' :
+                              usageRate >= 80 ? 'bg-danger' :
                               usageRate >= 50 ? 'bg-warning' :
                               'bg-success'
                             )}
                             style={{ width: `${Math.min(usageRate, 100)}%` }}
                           />
                         </div>
-                        <span className="text-xs text-neutral-500 w-10 text-right">{Math.round(usageRate)}%</span>
+                        <span className="text-xs text-neutral-500 w-10 text-right">{usageRate}%</span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">

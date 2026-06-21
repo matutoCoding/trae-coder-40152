@@ -12,8 +12,17 @@ export interface Shipper {
   id: string;
   name: string;
   quota: number;
-  usedQuota: number;
-  frozenQuota: number;
+  used: number;
+  frozen: number;
+  available: number;
+}
+
+export interface QuotaOverview {
+  totalQuota: number;
+  totalUsed: number;
+  totalFrozen: number;
+  totalAvailable: number;
+  shippers: Shipper[];
 }
 
 export interface Reservation {
@@ -44,6 +53,10 @@ export interface WaitlistItem {
   status: 'waiting' | 'notified' | 'confirmed' | 'cancelled' | 'converted';
   notifiedAt?: string;
   convertedReservationId?: string;
+  notifiedReservationId?: string;
+  releasedPlatformId?: string;
+  releasedStartTime?: string;
+  releasedEndTime?: string;
   createdAt: string;
 }
 

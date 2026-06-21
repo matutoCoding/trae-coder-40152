@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   Platform, Shipper, Reservation, WaitlistItem, Worker,
-  QuotaLog, SystemSettings
+  QuotaLog, SystemSettings, QuotaOverview
 } from '../../shared/types';
 import { api } from '../lib/api';
 
@@ -18,7 +18,7 @@ interface AppState {
   waitlist: WaitlistItem[];
   workers: Worker[];
   quotaLogs: QuotaLog[];
-  quotaOverview: { totalQuota: number; totalUsed: number; totalFrozen: number; totalAvailable: number; shippers: Shipper[] } | null;
+  quotaOverview: QuotaOverview | null;
   settings: SystemSettings | null;
   notifications: Notification[];
   loading: Record<string, boolean>;

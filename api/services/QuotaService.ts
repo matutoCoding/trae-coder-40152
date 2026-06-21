@@ -36,11 +36,11 @@ export class QuotaService {
     if (!shipper) {
       return { quota: 0, used: 0, frozen: 0, available: 0 };
     }
-    const available = shipper.quota - shipper.usedQuota - shipper.frozenQuota;
+    const available = shipper.quota - shipper.used - shipper.frozen;
     return {
       quota: shipper.quota,
-      used: shipper.usedQuota,
-      frozen: shipper.frozenQuota,
+      used: shipper.used,
+      frozen: shipper.frozen,
       available: Math.max(0, available),
     };
   }
@@ -72,7 +72,8 @@ export class QuotaService {
         };
       }
 
-      shipper.usedQuota += amount;
+      shipper.used += amount;
+      shipper.available = Math.max(0, shipper.quota - shipper.used - shipper.frozen);
       this.store.addQuotaLog(shipperId, amount, 'deduct', reservationId, operator);
       this.store.emit('shippers:change');
 
@@ -105,7 +106,8 @@ export class QuotaService {
         return { success: false, message: '发货方不存在' };
       }
 
-      shipper.usedQuota = Math.max(0, shipper.usedQuota - amount);
+      shipper.used = Math.max(0, shipper.used - amount);
+      shipper.available = Math.max(0, shipper.quota - shipper.used - shipper.frozen);
       this.store.addQuotaLog(shipperId, amount, 'release', reservationId, operator);
       this.store.emit('shippers:change');
 
@@ -152,7 +154,7 @@ export class QuotaService {
       return { success: false, message: '发货方不存在' };
     }
 
-    const minQuota = shipper.usedQuota + shipper.frozenQuota;
+    const minQuota = shipper.used + shipper.frozen;
     if (newQuota < minQuota) {
       return {
         success: false,
@@ -161,6 +163,7 @@ export class QuotaService {
     }
 
     shipper.quota = newQuota;
+    shipper.available = Math.max(0, newQuota - shipper.used - shipper.frozen);
     this.store.emit('shippers:change');
 
     return { success: true, message: '额度更新成功' };

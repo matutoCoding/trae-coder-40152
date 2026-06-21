@@ -1,6 +1,6 @@
 import type {
   Platform, Shipper, Reservation, WaitlistItem, Worker,
-  QuotaLog, SystemSettings, CreateReservationReq
+  QuotaLog, SystemSettings, CreateReservationReq, QuotaOverview
 } from '../../shared/types';
 
 interface ApiResponse<T> {
@@ -47,7 +47,7 @@ export const api = {
     remove: (id: string) => request<void>(`/api/waitlist/${id}`, { method: 'DELETE' }),
   },
   quota: {
-    overview: () => request<{ totalQuota: number; totalUsed: number; totalFrozen: number; totalAvailable: number; shippers: Shipper[] }>('/api/quota'),
+    overview: () => request<QuotaOverview>('/api/quota'),
     updateShipper: (id: string, quota: number) => request<Shipper>(`/api/quota/shippers/${id}`, { method: 'PUT', body: JSON.stringify({ quota }) }),
     logs: (limit?: number) => {
       const qs = limit ? `?limit=${limit}` : '';

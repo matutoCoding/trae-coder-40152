@@ -62,8 +62,11 @@ export class WaitlistService {
   async notifyWaitlistForSlot(
     releasedReservation: Reservation
   ): Promise<WaitlistItem | null> {
+    const releasedDate = new Date(releasedReservation.startTime).toDateString();
     const waiting = this.getWaitlist(true).filter(
-      (item) => item.status === 'waiting'
+      (item) =>
+        item.status === 'waiting' &&
+        new Date(item.targetDate).toDateString() === releasedDate
     );
 
     for (const item of waiting) {
@@ -74,6 +77,10 @@ export class WaitlistService {
 
       item.status = 'notified';
       item.notifiedAt = new Date().toISOString();
+      item.notifiedReservationId = releasedReservation.id;
+      item.releasedPlatformId = releasedReservation.platformId;
+      item.releasedStartTime = releasedReservation.startTime;
+      item.releasedEndTime = releasedReservation.endTime;
       this.store.emit('waitlist:change', item);
 
       return item;
@@ -99,12 +106,29 @@ export class WaitlistService {
       return { success: false, message: '可用额度不足' };
     }
 
+    let finalPlatformId = item.releasedPlatformId ?? '';
+    let finalStartTime = item.releasedStartTime ?? new Date().toISOString();
+    let finalEndTime =
+      item.releasedEndTime ??
+      new Date(Date.now() + 90 * 60 * 1000).toISOString();
+
+    if (item.notifiedReservationId && !finalPlatformId) {
+      const releasedRes = this.store.reservations.find(
+        (r) => r.id === item.notifiedReservationId
+      );
+      if (releasedRes) {
+        finalPlatformId = releasedRes.platformId;
+        finalStartTime = releasedRes.startTime;
+        finalEndTime = releasedRes.endTime;
+      }
+    }
+
     const reservation: Reservation = {
       id: `r${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
-      platformId: '',
+      platformId: finalPlatformId,
       shipperId: item.shipperId,
-      startTime: new Date().toISOString(),
-      endTime: new Date(Date.now() + 90 * 60 * 1000).toISOString(),
+      startTime: finalStartTime,
+      endTime: finalEndTime,
       vehicleNo: item.vehicleNo,
       vehicleType: item.vehicleType,
       cargoType: item.cargoType,

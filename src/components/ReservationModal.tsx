@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar, Package } from 'lucide-react';
+import { X, Calendar, Package, Wallet, TrendingDown, Lock, Unlock } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
+import { cn } from '../lib/utils';
 import type { Platform, Shipper } from '../../shared/types';
 
 interface Props {
@@ -96,6 +97,8 @@ export default function ReservationModal({
   };
 
   const shippers: Shipper[] = quotaOverview?.shippers || [];
+  const selectedShipper = shippers.find((s: Shipper) => s.id === shipperId);
+  const isQuotaInsufficient = !!selectedShipper && selectedShipper.available <= 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm animate-fade-in">
@@ -140,18 +143,71 @@ export default function ReservationModal({
             </div>
             <div>
               <label className="label-field">货主</label>
-              <select
-                className="input-field"
-                value={shipperId}
-                onChange={(e) => setShipperId(e.target.value)}
-              >
-                <option value="">请选择货主</option>
-                {shippers.map((s: Shipper) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} (剩余{s.quota - s.usedQuota - s.frozenQuota})
-                  </option>
-                ))}
-              </select>
+              {!quotaOverview ? (
+                <div className="input-field flex items-center justify-center text-neutral-400">
+                  <svg className="animate-spin w-4 h-4 mr-2" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  加载中...
+                </div>
+              ) : (
+                <>
+                  <select
+                    className="input-field"
+                    value={shipperId}
+                    onChange={(e) => setShipperId(e.target.value)}
+                  >
+                    <option value="">请选择货主</option>
+                    {shippers.map((s: Shipper) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} (剩余{s.available})
+                      </option>
+                    ))}
+                  </select>
+                  {shipperId && (() => {
+                    const shipper = shippers.find((s: Shipper) => s.id === shipperId);
+                    if (!shipper) return null;
+                    return (
+                      <div className="mt-2 p-3 rounded-lg bg-neutral-50 border border-neutral-200">
+                        <div className="grid grid-cols-4 gap-2 text-xs">
+                          <div className="text-center">
+                            <div className="flex items-center justify-center w-7 h-7 mx-auto rounded-lg bg-primary-500/10 mb-1">
+                              <Wallet className="w-3.5 h-3.5 text-primary-500" />
+                            </div>
+                            <p className="text-neutral-500 mb-0.5">总额</p>
+                            <p className="font-semibold text-neutral-800">{shipper.quota}</p>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center w-7 h-7 mx-auto rounded-lg bg-danger/10 mb-1">
+                              <TrendingDown className="w-3.5 h-3.5 text-danger" />
+                            </div>
+                            <p className="text-neutral-500 mb-0.5">已用</p>
+                            <p className="font-semibold text-danger">{shipper.used}</p>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center w-7 h-7 mx-auto rounded-lg mb-1" style={{ backgroundColor: 'rgba(253, 203, 110, 0.2)' }}>
+                              <Lock className="w-3.5 h-3.5" style={{ color: '#c9972b' }} />
+                            </div>
+                            <p className="text-neutral-500 mb-0.5">冻结</p>
+                            <p className="font-semibold" style={{ color: '#c9972b' }}>{shipper.frozen}</p>
+                          </div>
+                          <div className="text-center">
+                            <div className="flex items-center justify-center w-7 h-7 mx-auto rounded-lg bg-success/10 mb-1">
+                              <Unlock className="w-3.5 h-3.5 text-success" />
+                            </div>
+                            <p className="text-neutral-500 mb-0.5">剩余</p>
+                            <p className={cn('font-semibold', shipper.available === 0 ? 'text-danger' : 'text-success')}>{shipper.available}</p>
+                          </div>
+                        </div>
+                        {shipper.available === 0 && (
+                          <p className="text-xs text-danger mt-2 text-center">该货主可用额度已用尽</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </>
+              )}
               {errors.shipperId && <p className="text-xs text-danger mt-1">{errors.shipperId}</p>}
             </div>
           </div>
@@ -243,8 +299,13 @@ export default function ReservationModal({
           <button className="btn-outline" onClick={onClose}>
             取消
           </button>
-          <button className="btn-primary" onClick={handleSubmit}>
-            创建预约
+          <button
+            className={cn('btn-primary', isQuotaInsufficient && 'opacity-50 cursor-not-allowed')}
+            onClick={handleSubmit}
+            disabled={isQuotaInsufficient}
+            title={isQuotaInsufficient ? '可用额度不足' : ''}
+          >
+            {isQuotaInsufficient ? '额度不足' : '创建预约'}
           </button>
         </div>
       </div>

@@ -104,6 +104,42 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
       return
     }
 
+    if (platform.status === 'maintenance') {
+      res.status(400).json({
+        success: false,
+        message: '该月台处于维护状态，无法预约',
+      })
+      return
+    }
+
+    const isTimeOverlap = (
+      startA: string,
+      endA: string,
+      startB: string,
+      endB: string
+    ): boolean => {
+      const sA = new Date(startA).getTime()
+      const eA = new Date(endA).getTime()
+      const sB = new Date(startB).getTime()
+      const eB = new Date(endB).getTime()
+      return sA < eB && sB < eA
+    }
+
+    const conflictReservation = store.reservations.find(
+      (r) =>
+        r.platformId === platformId &&
+        ['pending', 'confirmed', 'loading'].includes(r.status) &&
+        isTimeOverlap(startTime, endTime, r.startTime, r.endTime)
+    )
+
+    if (conflictReservation) {
+      res.status(400).json({
+        success: false,
+        message: `该月台此时间段已被占用（状态：${conflictReservation.status}）`,
+      })
+      return
+    }
+
     const shipper = store.shippers.find((s) => s.id === shipperId)
     if (!shipper) {
       res.status(400).json({
@@ -224,6 +260,17 @@ router.put('/:id/complete', async (req: Request, res: Response): Promise<void> =
     reservation.status = 'completed'
     reservation.completedAt = new Date().toISOString()
 
+    if (reservation.workerIds?.length) {
+      for (const wid of reservation.workerIds) {
+        const worker = store.workers.find((w) => w.id === wid);
+        if (worker && worker.status === 'busy') {
+          worker.status = 'idle';
+          worker.todayTasks += 1;
+          store.emit('workers:change', worker);
+        }
+      }
+    }
+
     const releaseResult = await quotaService.releaseQuota(
       reservation.shipperId,
       1,
@@ -280,6 +327,16 @@ router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => 
     }
 
     reservation.status = 'cancelled'
+
+    if (reservation.workerIds?.length) {
+      for (const wid of reservation.workerIds) {
+        const worker = store.workers.find((w) => w.id === wid);
+        if (worker && worker.status === 'busy') {
+          worker.status = 'idle';
+          store.emit('workers:change', worker);
+        }
+      }
+    }
 
     const releaseResult = await quotaService.releaseQuota(
       reservation.shipperId,
@@ -356,6 +413,15 @@ router.put('/:id/assign', (req: Request, res: Response): void => {
     }
 
     reservation.workerIds = workerIds
+
+    for (const wid of workerIds) {
+      const worker = store.workers.find((w) => w.id === wid);
+      if (worker && worker.status !== 'leave') {
+        worker.status = 'busy';
+        store.emit('workers:change', worker);
+      }
+    }
+
     store.emit('reservations:change', reservation)
 
     res.json({
