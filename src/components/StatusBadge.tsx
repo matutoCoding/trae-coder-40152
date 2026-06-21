@@ -24,6 +24,7 @@ const waitlistColors: Record<WaitlistItem['status'], string> = {
   confirmed: 'bg-success/10 text-success border border-success/30',
   cancelled: 'bg-neutral-200 text-neutral-500 border border-neutral-300',
   converted: 'bg-primary-500/20 text-primary-600 border border-primary-500/40',
+  skipped: 'bg-warning/20 text-warning-600 border border-warning/40',
 };
 
 const waitlistLabels: Record<WaitlistItem['status'], string> = {
@@ -32,6 +33,7 @@ const waitlistLabels: Record<WaitlistItem['status'], string> = {
   confirmed: '已确认',
   cancelled: '已取消',
   converted: '已转正',
+  skipped: '已跳过',
 };
 
 const workerColors: Record<Worker['status'], string> = {

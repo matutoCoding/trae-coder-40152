@@ -6,6 +6,8 @@ import type {
   Worker,
   QuotaLog,
   SystemSettings,
+  OperationLog,
+  QuotaAdjustment,
 } from '../../shared/types.js';
 import {
   platforms as mockPlatforms,
@@ -15,6 +17,8 @@ import {
   workers as mockWorkers,
   quotaLogs as mockQuotaLogs,
   settings as mockSettings,
+  operationLogs as mockOperationLogs,
+  quotaAdjustments as mockQuotaAdjustments,
 } from '../../shared/mockData.js';
 
 type EventCallback = (data?: unknown) => void;
@@ -26,7 +30,9 @@ type EventName =
   | 'waitlist:change'
   | 'workers:change'
   | 'quotaLogs:change'
-  | 'settings:change';
+  | 'settings:change'
+  | 'operationLogs:change'
+  | 'quotaAdjustments:change';
 
 export class DataStore {
   private static instance: DataStore | null = null;
@@ -37,6 +43,8 @@ export class DataStore {
   waitlist: WaitlistItem[];
   workers: Worker[];
   quotaLogs: QuotaLog[];
+  operationLogs: OperationLog[];
+  quotaAdjustments: QuotaAdjustment[];
   settings: SystemSettings;
 
   private listeners: Map<EventName, Set<EventCallback>> = new Map();
@@ -48,6 +56,8 @@ export class DataStore {
     this.waitlist = JSON.parse(JSON.stringify(mockWaitlist));
     this.workers = JSON.parse(JSON.stringify(mockWorkers));
     this.quotaLogs = JSON.parse(JSON.stringify(mockQuotaLogs));
+    this.operationLogs = JSON.parse(JSON.stringify(mockOperationLogs));
+    this.quotaAdjustments = JSON.parse(JSON.stringify(mockQuotaAdjustments));
     this.settings = JSON.parse(JSON.stringify(mockSettings));
   }
 
@@ -84,9 +94,16 @@ export class DataStore {
   addQuotaLog(
     shipperId: string,
     amount: number,
-    type: 'deduct' | 'release' | 'freeze' | 'unfreeze',
+    type: QuotaLog['type'],
     reservationId?: string,
-    operator: string = 'system'
+    operator: string = 'system',
+    extra?: {
+      adjustmentId?: string;
+      applicant?: string;
+      approver?: string;
+      beforeBalance?: number;
+      afterBalance?: number;
+    }
   ): QuotaLog {
     const log: QuotaLog = {
       id: `ql${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
@@ -96,6 +113,7 @@ export class DataStore {
       reservationId,
       operator,
       createdAt: new Date().toISOString(),
+      ...extra,
     };
     this.quotaLogs.unshift(log);
     this.emit('quotaLogs:change', log);

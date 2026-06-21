@@ -11,6 +11,7 @@ interface Props {
   defaultPlatformId?: string;
   defaultStartTime?: string;
   defaultEndTime?: string;
+  defaultDate?: string;
 }
 
 export default function ReservationModal({
@@ -19,6 +20,7 @@ export default function ReservationModal({
   defaultPlatformId,
   defaultStartTime,
   defaultEndTime,
+  defaultDate,
 }: Props) {
   const platforms = useAppStore((s) => s.platforms);
   const quotaOverview = useAppStore((s) => s.quotaOverview);
@@ -37,6 +39,8 @@ export default function ReservationModal({
   const [cargoType, setCargoType] = useState('');
   const [cargoWeight, setCargoWeight] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const effectiveDate = defaultDate || selectedDate;
 
   useEffect(() => {
     if (open) {
@@ -73,8 +77,8 @@ export default function ReservationModal({
   const handleSubmit = async () => {
     if (!validate()) return;
     setLoading('createReservation', true);
-    const startISO = `${selectedDate}T${startTime}:00`;
-    const endISO = `${selectedDate}T${endTime}:00`;
+    const startISO = `${effectiveDate}T${startTime}:00`;
+    const endISO = `${effectiveDate}T${endTime}:00`;
     const res = await api.reservations.create({
       platformId,
       shipperId,
@@ -110,7 +114,7 @@ export default function ReservationModal({
             </div>
             <div>
               <h3 className="font-display font-semibold text-lg text-neutral-800">新建预约</h3>
-              <p className="text-xs text-neutral-500">{selectedDate}</p>
+              <p className="text-xs text-neutral-500">{effectiveDate}</p>
             </div>
           </div>
           <button

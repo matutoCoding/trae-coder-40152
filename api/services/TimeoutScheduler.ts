@@ -114,6 +114,8 @@ export class TimeoutScheduler {
       );
     }
 
+    this.waitlistService.checkNotifiedTimeouts();
+
     return timeoutIds;
   }
 }

@@ -15,11 +15,15 @@ import quotaRoutes from './routes/quota.js'
 import workersRoutes from './routes/workers.js'
 import settingsRoutes from './routes/settings.js'
 import eventsRoutes from './routes/events.js'
+import quotaAdjustmentsRoutes from './routes/quota-adjustments.js'
+import operationLogsRoutes from './routes/operation-logs.js'
 import { DataStore } from './store/dataStore.js'
 import { LockManager } from './services/LockManager.js'
 import { QuotaService } from './services/QuotaService.js'
 import { WaitlistService } from './services/WaitlistService.js'
 import { TimeoutScheduler } from './services/TimeoutScheduler.js'
+import { OperationLogService } from './services/OperationLogService.js'
+import { QuotaApprovalService } from './services/QuotaApprovalService.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -37,6 +41,8 @@ const lockManager = new LockManager()
 const quotaService = new QuotaService(dataStore, lockManager)
 const waitlistService = new WaitlistService(dataStore, quotaService)
 const timeoutScheduler = TimeoutScheduler.getInstance(dataStore, quotaService, waitlistService)
+const operationLogService = new OperationLogService(dataStore)
+const quotaApprovalService = new QuotaApprovalService(dataStore, quotaService)
 
 app.locals.services = {
   dataStore,
@@ -44,6 +50,8 @@ app.locals.services = {
   quotaService,
   waitlistService,
   timeoutScheduler,
+  operationLogService,
+  quotaApprovalService,
 }
 
 app.use('/api/auth', authRoutes)
@@ -54,6 +62,8 @@ app.use('/api/quota', quotaRoutes)
 app.use('/api/workers', workersRoutes)
 app.use('/api/settings', settingsRoutes)
 app.use('/api/events', eventsRoutes)
+app.use('/api/quota-adjustments', quotaAdjustmentsRoutes)
+app.use('/api/operation-logs', operationLogsRoutes)
 
 app.use(
   '/api/health',

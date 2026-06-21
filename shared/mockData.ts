@@ -1,4 +1,4 @@
-import type { Platform, Shipper, Reservation, WaitlistItem, Worker, QuotaLog, SystemSettings } from './types';
+import type { Platform, Shipper, Reservation, WaitlistItem, Worker, QuotaLog, SystemSettings, OperationLog, QuotaAdjustment } from './types';
 
 export const platforms: Platform[] = [
   {
@@ -220,7 +220,7 @@ export const waitlist: WaitlistItem[] = [
     vehicleType: '冷藏车',
     cargoType: '冷链货物',
     status: 'notified',
-    notifiedAt: `${today}T09:00:00`,
+    notifiedAt: new Date(Date.now() - 10 * 60 * 1000).toISOString(),
     createdAt: `${today}T07:30:00`,
   },
   {
@@ -235,6 +235,19 @@ export const waitlist: WaitlistItem[] = [
     convertedReservationId: 'r3',
     createdAt: `${today}T06:45:00`,
   },
+  {
+    id: 'wl4',
+    shipperId: 's4',
+    targetDate: today,
+    priority: 2,
+    vehicleNo: '沪D66666',
+    vehicleType: '平板货车',
+    cargoType: '建材',
+    status: 'skipped',
+    skipReason: '超时未确认',
+    skippedAt: `${today}T08:45:00`,
+    createdAt: `${today}T07:15:00`,
+  },
 ];
 
 export const workers: Worker[] = [
@@ -246,6 +259,8 @@ export const workers: Worker[] = [
   { id: 'w6', name: '孙八', group: 'B', status: 'idle', todayTasks: 2 },
   { id: 'w7', name: '周九', group: 'B', status: 'leave', todayTasks: 0 },
   { id: 'w8', name: '吴十', group: 'B', status: 'busy', todayTasks: 5 },
+  { id: 'w9', name: '郑十一', group: 'C', status: 'idle', todayTasks: 1 },
+  { id: 'w10', name: '王十二', group: 'C', status: 'busy', todayTasks: 3 },
 ];
 
 export const quotaLogs: QuotaLog[] = [
@@ -259,6 +274,98 @@ export const quotaLogs: QuotaLog[] = [
   { id: 'ql8', shipperId: 's4', amount: 2, type: 'unfreeze', reservationId: 'r8', operator: 'admin', createdAt: `${today}T09:30:00` },
   { id: 'ql9', shipperId: 's1', amount: 2, type: 'deduct', operator: 'admin', createdAt: '2026-06-20T16:00:00' },
   { id: 'ql10', shipperId: 's2', amount: 3, type: 'release', operator: 'system', createdAt: '2026-06-20T17:00:00' },
+  { id: 'ql11', shipperId: 's2', amount: 3, type: 'adjust', adjustmentId: 'qa2', applicant: '李经理', approver: 'admin', beforeBalance: 11, afterBalance: 14, operator: 'admin', createdAt: `${today}T10:00:00` },
+  { id: 'ql12', shipperId: 's4', amount: 2, type: 'adjust', adjustmentId: 'qa4', applicant: '王主管', approver: 'admin', beforeBalance: 11, afterBalance: 13, operator: 'admin', createdAt: `${today}T10:30:00` },
+];
+
+export const operationLogs: OperationLog[] = [
+  { id: 'ol1', reservationId: 'r1', action: 'create', actionLabel: '创建预约', operator: '王调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '华润食品预约D01卸车', createdAt: `${today}T06:00:00` },
+  { id: 'ol2', reservationId: 'r1', action: 'assign_workers', actionLabel: '分配工人', operator: 'admin', operatorRole: 'admin', detail: '分配张三、李四', createdAt: `${today}T07:00:00` },
+  { id: 'ol3', reservationId: 'r1', action: 'complete', actionLabel: '完成装卸', operator: 'system', operatorRole: 'system', beforeStatus: 'loading', afterStatus: 'completed', createdAt: `${today}T09:20:00` },
+
+  { id: 'ol4', reservationId: 'r2', action: 'create', actionLabel: '创建预约', operator: '李调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '顺丰冷链预约D02卸车', createdAt: `${today}T06:30:00` },
+  { id: 'ol5', reservationId: 'r2', action: 'confirm', actionLabel: '确认预约', operator: 'system', operatorRole: 'system', beforeStatus: 'pending', afterStatus: 'confirmed', createdAt: `${today}T07:00:00` },
+  { id: 'ol6', reservationId: 'r2', action: 'start_loading', actionLabel: '开始装卸', operator: '王五', operatorRole: 'shipper', beforeStatus: 'confirmed', afterStatus: 'loading', createdAt: `${today}T09:05:00` },
+
+  { id: 'ol7', reservationId: 'r3', action: 'create', actionLabel: '创建预约', operator: '张调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '京东物流预约L01装车', createdAt: `${today}T07:00:00` },
+  { id: 'ol8', reservationId: 'r3', action: 'confirm', actionLabel: '确认预约', operator: 'admin', operatorRole: 'admin', beforeStatus: 'pending', afterStatus: 'confirmed', createdAt: `${today}T07:30:00` },
+  { id: 'ol9', reservationId: 'r3', action: 'waitlist_convert', actionLabel: '候补转正式', operator: 'system', operatorRole: 'system', detail: '由候补wl3转换而来', createdAt: `${today}T07:45:00` },
+
+  { id: 'ol10', reservationId: 'r4', action: 'create', actionLabel: '创建预约', operator: '王调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '安能快运预约M01混合', createdAt: `${today}T07:30:00` },
+
+  { id: 'ol11', reservationId: 'r5', action: 'create', actionLabel: '创建预约', operator: '李调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '华润食品预约D01卸车', createdAt: `${today}T08:00:00` },
+  { id: 'ol12', reservationId: 'r5', action: 'confirm', actionLabel: '确认预约', operator: 'admin', operatorRole: 'admin', beforeStatus: 'pending', afterStatus: 'confirmed', createdAt: `${today}T08:30:00` },
+
+  { id: 'ol13', reservationId: 'r6', action: 'create', actionLabel: '创建预约', operator: '张调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '顺丰冷链预约D02卸车', createdAt: `${today}T08:30:00` },
+  { id: 'ol14', reservationId: 'r6', action: 'cancel', actionLabel: '取消预约', operator: '李经理', operatorRole: 'shipper', beforeStatus: 'pending', afterStatus: 'cancelled', detail: '客户临时取消', createdAt: `${today}T09:00:00` },
+
+  { id: 'ol15', reservationId: 'r7', action: 'create', actionLabel: '创建预约', operator: '王调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '京东物流预约L01装车', createdAt: `${today}T09:00:00` },
+
+  { id: 'ol16', reservationId: 'r8', action: 'create', actionLabel: '创建预约', operator: '李调度', operatorRole: 'scheduler', beforeStatus: '', afterStatus: 'pending', detail: '安能快运预约M01混合', createdAt: `${today}T09:30:00` },
+  { id: 'ol17', reservationId: 'r8', action: 'timeout', actionLabel: '超时未到', operator: 'system', operatorRole: 'system', beforeStatus: 'pending', afterStatus: 'timeout', detail: '车辆超时30分钟未到', createdAt: `${today}T10:00:00` },
+];
+
+export const quotaAdjustments: QuotaAdjustment[] = [
+  {
+    id: 'qa1',
+    shipperId: 's1',
+    type: 'increase',
+    amount: 5,
+    reason: '旺季补货',
+    status: 'pending',
+    applicant: '张经理',
+    applicantRole: 'shipper',
+    beforeQuota: 30,
+    createdAt: `${today}T09:00:00`,
+  },
+  {
+    id: 'qa2',
+    shipperId: 's2',
+    type: 'increase',
+    amount: 3,
+    reason: '业务增长需求',
+    status: 'approved',
+    applicant: '李经理',
+    applicantRole: 'shipper',
+    approver: 'admin',
+    approverRole: 'admin',
+    approvedAt: `${today}T10:00:00`,
+    beforeQuota: 25,
+    afterQuota: 28,
+    createdAt: `${today}T09:30:00`,
+  },
+  {
+    id: 'qa3',
+    shipperId: 's3',
+    type: 'decrease',
+    amount: 5,
+    reason: '近期爽约率高',
+    status: 'rejected',
+    applicant: '王主管',
+    applicantRole: 'admin',
+    approver: 'admin',
+    approverRole: 'admin',
+    rejectedAt: `${today}T09:45:00`,
+    rejectReason: '需提交详细数据报告',
+    beforeQuota: 25,
+    createdAt: `${today}T09:15:00`,
+  },
+  {
+    id: 'qa4',
+    shipperId: 's4',
+    type: 'increase',
+    amount: 2,
+    reason: '新客户拓展',
+    status: 'approved',
+    applicant: '王主管',
+    applicantRole: 'shipper',
+    approver: 'admin',
+    approverRole: 'admin',
+    approvedAt: `${today}T10:30:00`,
+    beforeQuota: 20,
+    afterQuota: 22,
+    createdAt: `${today}T10:00:00`,
+  },
 ];
 
 export const settings: SystemSettings = {

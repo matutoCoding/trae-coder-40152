@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { X, User, Clock } from 'lucide-react';
 import type { Reservation, Worker, Platform, Shipper } from '../../shared/types';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
+import { cn } from '../lib/utils';
 
 interface Props {
   open: boolean;
@@ -13,6 +14,7 @@ interface Props {
 export default function DispatchModal({ open, onClose, reservation }: Props) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [selectedGroup, setSelectedGroup] = useState<string>('all');
 
   const workers = useAppStore(s => s.workers);
   const platforms = useAppStore(s => s.platforms);
@@ -23,7 +25,18 @@ export default function DispatchModal({ open, onClose, reservation }: Props) {
 
   if (!open || !reservation) return null;
 
-  const idleWorkers = workers.filter(w => w.status === 'idle');
+  const groups = useMemo(() => {
+    const groupSet = new Set(workers.map(w => w.group));
+    return Array.from(groupSet).sort();
+  }, [workers]);
+
+  const idleWorkers = useMemo(() => {
+    let result = workers.filter(w => w.status === 'idle');
+    if (selectedGroup !== 'all') {
+      result = result.filter(w => w.group === selectedGroup);
+    }
+    return result;
+  }, [workers, selectedGroup]);
   const platform = platforms.find(p => p.id === reservation.platformId);
   const shipper = quotaOverview?.shippers.find(s => s.id === reservation.shipperId);
 
@@ -110,6 +123,33 @@ export default function DispatchModal({ open, onClose, reservation }: Props) {
               <h4 className="font-semibold text-sm text-neutral-800">选择空闲装卸工</h4>
               <span className="text-xs text-neutral-500">已选 {selectedIds.length} 人</span>
             </div>
+            <div className="flex items-center gap-1 mb-3 pb-3 border-b border-neutral-100">
+              <button
+                onClick={() => setSelectedGroup('all')}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  selectedGroup === 'all'
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                )}
+              >
+                全部
+              </button>
+              {groups.map(g => (
+                <button
+                  key={g}
+                  onClick={() => setSelectedGroup(g)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                    selectedGroup === g
+                      ? 'bg-primary-500 text-white'
+                      : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                  )}
+                >
+                  {g}组
+                </button>
+              ))}
+            </div>
             {idleWorkers.length === 0 ? (
               <div className="py-12 text-center text-neutral-500 text-sm border border-dashed border-neutral-200 rounded-lg">
                 暂无空闲装卸工
@@ -137,8 +177,11 @@ export default function DispatchModal({ open, onClose, reservation }: Props) {
                       </div>
                       <div>
                         <p className="font-medium text-neutral-800 text-sm">{worker.name}</p>
-                        <p className="text-xs text-neutral-500 flex items-center gap-1">
-                          <User className="w-3 h-3" /> {worker.group}组 · 今日{worker.todayTasks}单
+                        <p className="text-xs text-neutral-500 flex items-center gap-1 flex-wrap">
+                          <span className="px-1.5 py-0.5 rounded bg-primary-500/10 text-primary-500 font-medium">
+                            {worker.group}组
+                          </span>
+                          <span>· 今日{worker.todayTasks}单</span>
                         </p>
                       </div>
                     </div>

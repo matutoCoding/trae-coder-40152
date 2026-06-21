@@ -19,6 +19,57 @@ router.get('/', (req: Request, res: Response): void => {
   }
 })
 
+router.get('/group-stats', (req: Request, res: Response): void => {
+  try {
+    const store = DataStore.getInstance()
+    const groupMap = new Map<string, {
+      total: number
+      idle: number
+      busy: number
+      leave: number
+      todayTotalTasks: number
+    }>()
+
+    for (const worker of store.workers) {
+      const group = worker.group || '未分组'
+      if (!groupMap.has(group)) {
+        groupMap.set(group, {
+          total: 0,
+          idle: 0,
+          busy: 0,
+          leave: 0,
+          todayTotalTasks: 0,
+        })
+      }
+      const stats = groupMap.get(group)!
+      stats.total += 1
+      stats.todayTotalTasks += worker.todayTasks || 0
+      if (worker.status === 'idle') {
+        stats.idle += 1
+      } else if (worker.status === 'busy') {
+        stats.busy += 1
+      } else if (worker.status === 'leave') {
+        stats.leave += 1
+      }
+    }
+
+    const data = Array.from(groupMap.entries()).map(([group, stats]) => ({
+      group,
+      ...stats,
+    }))
+
+    res.json({
+      success: true,
+      data,
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '获取班组统计失败',
+    })
+  }
+})
+
 router.post('/', (req: Request, res: Response): void => {
   try {
     const store = DataStore.getInstance()

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type {
   Platform, Shipper, Reservation, WaitlistItem, Worker,
-  QuotaLog, SystemSettings, QuotaOverview
+  QuotaLog, SystemSettings, QuotaOverview, QuotaAdjustment
 } from '../../shared/types';
 import { api } from '../lib/api';
 
@@ -19,6 +19,7 @@ interface AppState {
   workers: Worker[];
   quotaLogs: QuotaLog[];
   quotaOverview: QuotaOverview | null;
+  quotaAdjustments: QuotaAdjustment[];
   settings: SystemSettings | null;
   notifications: Notification[];
   loading: Record<string, boolean>;
@@ -31,11 +32,15 @@ interface AppState {
 
   fetchAll: () => Promise<void>;
   fetchPlatforms: () => Promise<void>;
-  fetchReservations: (date?: string) => Promise<void>;
+  fetchReservations: (dateOrRange?: string | { startDate: string; endDate: string }) => Promise<void>;
   fetchWaitlist: () => Promise<void>;
   fetchWorkers: () => Promise<void>;
   fetchQuota: () => Promise<void>;
   fetchQuotaLogs: () => Promise<void>;
+  fetchQuotaAdjustments: (params?: { status?: string; shipperId?: string }) => Promise<void>;
+  createQuotaAdjustment: (data: { shipperId: string; type: 'increase' | 'decrease'; amount: number; reason: string; applicant: string }) => Promise<boolean>;
+  approveQuotaAdjustment: (id: string, approver: string) => Promise<boolean>;
+  rejectQuotaAdjustment: (id: string, approver: string, rejectReason: string) => Promise<boolean>;
   fetchSettings: () => Promise<void>;
 }
 
@@ -48,6 +53,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   workers: [],
   quotaLogs: [],
   quotaOverview: null,
+  quotaAdjustments: [],
   settings: null,
   notifications: [],
   loading: {},
@@ -79,9 +85,15 @@ export const useAppStore = create<AppState>((set, get) => ({
     const res = await api.platforms.list();
     if (res.success && res.data) set({ platforms: res.data });
   },
-  fetchReservations: async (date) => {
-    const d = date || get().selectedDate;
-    const res = await api.reservations.list({ date: d });
+  fetchReservations: async (dateOrRange) => {
+    let params: { date?: string; startDate?: string; endDate?: string };
+    if (dateOrRange && typeof dateOrRange === 'object' && 'startDate' in dateOrRange) {
+      params = { startDate: dateOrRange.startDate, endDate: dateOrRange.endDate };
+    } else {
+      const d = (dateOrRange as string | undefined) || get().selectedDate;
+      params = { date: d };
+    }
+    const res = await api.reservations.list(params);
     if (res.success && res.data) set({ reservations: res.data });
   },
   fetchWaitlist: async () => {
@@ -99,6 +111,36 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchQuotaLogs: async () => {
     const res = await api.quota.logs(50);
     if (res.success && res.data) set({ quotaLogs: res.data });
+  },
+  fetchQuotaAdjustments: async (params) => {
+    const res = await api.quotaAdjustments.list(params);
+    if (res.success && res.data) set({ quotaAdjustments: res.data });
+  },
+  createQuotaAdjustment: async (data) => {
+    const res = await api.quotaAdjustments.create(data);
+    if (res.success) {
+      get().fetchQuotaAdjustments();
+      return true;
+    }
+    return false;
+  },
+  approveQuotaAdjustment: async (id, approver) => {
+    const res = await api.quotaAdjustments.approve(id, approver);
+    if (res.success) {
+      get().fetchQuotaAdjustments();
+      get().fetchQuota();
+      get().fetchQuotaLogs();
+      return true;
+    }
+    return false;
+  },
+  rejectQuotaAdjustment: async (id, approver, rejectReason) => {
+    const res = await api.quotaAdjustments.reject(id, approver, rejectReason);
+    if (res.success) {
+      get().fetchQuotaAdjustments();
+      return true;
+    }
+    return false;
   },
   fetchSettings: async () => {
     const res = await api.settings.get();

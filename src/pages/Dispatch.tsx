@@ -1,19 +1,44 @@
-import { useState, useEffect } from 'react';
-import { Users, Coffee, Briefcase, CalendarX, Truck, Clock, MapPin, User } from 'lucide-react';
-import type { Reservation, Platform, Shipper } from '../../shared/types';
+import { useState, useEffect, useMemo } from 'react';
+import { Users, Coffee, Briefcase, CalendarX, Truck, Clock, MapPin, User, Layers } from 'lucide-react';
+import type { Reservation, Platform, Shipper, Worker } from '../../shared/types';
 import { useAppStore } from '../store/appStore';
 import StatusBadge from '../components/StatusBadge';
 import DispatchModal from '../components/DispatchModal';
+import { cn } from '../lib/utils';
 
 export default function Dispatch() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedReservation, setSelectedReservation] = useState<Reservation | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string>('all');
 
   const workers = useAppStore(s => s.workers);
   const reservations = useAppStore(s => s.reservations);
   const platforms = useAppStore(s => s.platforms);
   const quotaOverview = useAppStore(s => s.quotaOverview);
   const fetchAll = useAppStore(s => s.fetchAll);
+
+  const groups = useMemo(() => {
+    const groupSet = new Set(workers.map(w => w.group));
+    return Array.from(groupSet).sort();
+  }, [workers]);
+
+  const groupStats = useMemo(() => {
+    const stats: Record<string, { total: number; idle: number; busy: number; leave: number; todayTasks: number }> = {};
+    workers.forEach(w => {
+      if (!stats[w.group]) {
+        stats[w.group] = { total: 0, idle: 0, busy: 0, leave: 0, todayTasks: 0 };
+      }
+      stats[w.group].total++;
+      stats[w.group][w.status as 'idle' | 'busy' | 'leave']++;
+      stats[w.group].todayTasks += w.todayTasks;
+    });
+    return stats;
+  }, [workers]);
+
+  const filteredWorkers = useMemo(() => {
+    if (selectedGroup === 'all') return workers;
+    return workers.filter(w => w.group === selectedGroup);
+  }, [workers, selectedGroup]);
 
   useEffect(() => {
     fetchAll();
@@ -115,22 +140,78 @@ export default function Dispatch() {
       </div>
 
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2 mb-4">
+          <Layers className="w-5 h-5 text-primary-500" />
+          <h3 className="font-display font-semibold text-lg text-neutral-800">班组统计</h3>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          {groups.map(group => {
+            const stats = groupStats[group];
+            return (
+              <div key={group} className="rounded-lg border border-neutral-200 bg-neutral-50/50 p-4 hover:bg-primary-50/30 hover:border-primary-200 transition-all">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-display font-bold text-lg text-neutral-800">{group}组</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-500 font-medium">
+                    {stats.total}人
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs mb-3">
+                  <div className="text-center">
+                    <p className="font-bold text-success text-lg">{stats.idle}</p>
+                    <p className="text-neutral-500">空闲</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold text-accent-500 text-lg">{stats.busy}</p>
+                    <p className="text-neutral-500">作业中</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-bold text-neutral-500 text-lg">{stats.leave}</p>
+                    <p className="text-neutral-500">请假</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-neutral-200">
+                  <span className="text-neutral-500">今日完成</span>
+                  <span className="font-semibold text-neutral-700">{stats.todayTasks} 单</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <h3 className="font-display font-semibold text-lg text-neutral-800">装卸工状态</h3>
-          <div className="flex items-center gap-4 text-xs text-neutral-500">
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-success" />空闲
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-accent-500" />作业中
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-neutral-400" />请假
-            </span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setSelectedGroup('all')}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                selectedGroup === 'all'
+                  ? 'bg-primary-500 text-white'
+                  : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+              )}
+            >
+              全部
+            </button>
+            {groups.map(g => (
+              <button
+                key={g}
+                onClick={() => setSelectedGroup(g)}
+                className={cn(
+                  'px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
+                  selectedGroup === g
+                    ? 'bg-primary-500 text-white'
+                    : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'
+                )}
+              >
+                {g}组
+              </button>
+            ))}
           </div>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {workers.map(worker => {
+          {filteredWorkers.map(worker => {
             const currentTask = getCurrentTask(worker.id);
             const taskPlatform = currentTask ? getPlatform(currentTask.platformId) : null;
             const taskShipper = currentTask ? getShipper(currentTask.shipperId) : null;

@@ -23,13 +23,21 @@ interface AppLocals {
     waitlistService: {
       notifyWaitlistForSlot: (reservation: Reservation) => Promise<unknown>
     }
+    operationLogService?: {
+      addLog: (
+        reservationId: string,
+        action: string,
+        operator: string,
+        detail?: string
+      ) => unknown
+    }
   }
 }
 
 router.get('/', (req: Request, res: Response): void => {
   try {
     const store = DataStore.getInstance()
-    const { date, platformId, status } = req.query
+    const { date, startDate, endDate, platformId, status } = req.query
 
     let reservations = [...store.reservations]
 
@@ -38,6 +46,18 @@ router.get('/', (req: Request, res: Response): void => {
       reservations = reservations.filter(
         (r) => new Date(r.startTime).toDateString() === targetDate
       )
+    }
+
+    if (startDate && endDate) {
+      const start = new Date(startDate as string)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(endDate as string)
+      end.setHours(23, 59, 59, 999)
+      reservations = reservations.filter((r) => {
+        const rStart = new Date(r.startTime).getTime()
+        const rEnd = new Date(r.endTime).getTime()
+        return rEnd >= start.getTime() && rStart <= end.getTime()
+      })
     }
 
     if (platformId) {
@@ -64,7 +84,7 @@ router.get('/', (req: Request, res: Response): void => {
 router.post('/', async (req: Request, res: Response): Promise<void> => {
   try {
     const store = DataStore.getInstance()
-    const { quotaService } = (req.app.locals as AppLocals).services
+    const { quotaService, operationLogService } = (req.app.locals as AppLocals).services
     const body: CreateReservationReq = req.body
 
     const {
@@ -182,6 +202,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     store.reservations.push(reservation)
     store.emit('reservations:change', reservation)
 
+    if (operationLogService) {
+      operationLogService.addLog(
+        reservation.id,
+        'create',
+        'shipper',
+        '创建预约'
+      )
+    }
+
     res.json({
       success: true,
       data: reservation,
@@ -198,6 +227,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
 router.put('/:id/confirm', (req: Request, res: Response): void => {
   try {
     const store = DataStore.getInstance()
+    const { operationLogService } = (req.app.locals as AppLocals).services
     const { id } = req.params
 
     const reservation = store.reservations.find((r) => r.id === id)
@@ -221,6 +251,15 @@ router.put('/:id/confirm', (req: Request, res: Response): void => {
     reservation.arrivedAt = new Date().toISOString()
     store.emit('reservations:change', reservation)
 
+    if (operationLogService) {
+      operationLogService.addLog(
+        reservation.id,
+        'confirm',
+        'scheduler',
+        '确认到港'
+      )
+    }
+
     res.json({
       success: true,
       data: reservation,
@@ -237,7 +276,7 @@ router.put('/:id/confirm', (req: Request, res: Response): void => {
 router.put('/:id/complete', async (req: Request, res: Response): Promise<void> => {
   try {
     const store = DataStore.getInstance()
-    const { quotaService, waitlistService } = (req.app.locals as AppLocals).services
+    const { quotaService, waitlistService, operationLogService } = (req.app.locals as AppLocals).services
     const { id } = req.params
 
     const reservation = store.reservations.find((r) => r.id === id)
@@ -290,6 +329,15 @@ router.put('/:id/complete', async (req: Request, res: Response): Promise<void> =
 
     store.emit('reservations:change', reservation)
 
+    if (operationLogService) {
+      operationLogService.addLog(
+        reservation.id,
+        'complete',
+        'scheduler',
+        '完成装卸'
+      )
+    }
+
     res.json({
       success: true,
       data: reservation,
@@ -306,7 +354,7 @@ router.put('/:id/complete', async (req: Request, res: Response): Promise<void> =
 router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => {
   try {
     const store = DataStore.getInstance()
-    const { quotaService, waitlistService } = (req.app.locals as AppLocals).services
+    const { quotaService, waitlistService, operationLogService } = (req.app.locals as AppLocals).services
     const { id } = req.params
 
     const reservation = store.reservations.find((r) => r.id === id)
@@ -357,6 +405,15 @@ router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => 
 
     store.emit('reservations:change', reservation)
 
+    if (operationLogService) {
+      operationLogService.addLog(
+        reservation.id,
+        'cancel',
+        'scheduler',
+        '取消预约'
+      )
+    }
+
     res.json({
       success: true,
       data: reservation,
@@ -373,6 +430,7 @@ router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => 
 router.put('/:id/assign', (req: Request, res: Response): void => {
   try {
     const store = DataStore.getInstance()
+    const { operationLogService } = (req.app.locals as AppLocals).services
     const { id } = req.params
     const { workerIds } = req.body as { workerIds: string[] }
 
@@ -423,6 +481,18 @@ router.put('/:id/assign', (req: Request, res: Response): void => {
     }
 
     store.emit('reservations:change', reservation)
+
+    if (operationLogService) {
+      const workerNames = workerIds
+        .map((wid) => store.workers.find((w) => w.id === wid)?.name || wid)
+        .join(', ')
+      operationLogService.addLog(
+        reservation.id,
+        'assign_workers',
+        'scheduler',
+        `指派了${workerIds.length}名工人：${workerNames}`
+      )
+    }
 
     res.json({
       success: true,

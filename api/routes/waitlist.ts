@@ -18,7 +18,19 @@ interface AppLocals {
       confirmWaitlistItem: (
         waitlistId: string
       ) => Promise<{ success: boolean; message: string; reservation?: unknown }>
+      skipWaitlistItem: (
+        waitlistId: string,
+        skipReason: string
+      ) => { success: boolean; message: string; nextItem?: WaitlistItem | null }
       cancelWaitlistItem: (waitlistId: string) => { success: boolean; message: string }
+    }
+    operationLogService?: {
+      addLog: (
+        reservationId: string,
+        action: string,
+        operator: string,
+        detail?: string
+      ) => unknown
     }
   }
 }
@@ -96,7 +108,7 @@ router.post('/', (req: Request, res: Response): void => {
 
 router.put('/:id/confirm', async (req: Request, res: Response): Promise<void> => {
   try {
-    const { waitlistService } = (req.app.locals as AppLocals).services
+    const { waitlistService, operationLogService } = (req.app.locals as AppLocals).services
     const { id } = req.params
 
     const result = await waitlistService.confirmWaitlistItem(id)
@@ -109,6 +121,16 @@ router.put('/:id/confirm', async (req: Request, res: Response): Promise<void> =>
       return
     }
 
+    if (result.reservation && operationLogService) {
+      const reservation = result.reservation as { id: string }
+      operationLogService.addLog(
+        reservation.id,
+        'waitlist_convert',
+        'scheduler',
+        '候补确认转正式预约'
+      )
+    }
+
     res.json({
       success: true,
       data: result.reservation,
@@ -118,6 +140,43 @@ router.put('/:id/confirm', async (req: Request, res: Response): Promise<void> =>
     res.status(500).json({
       success: false,
       message: error instanceof Error ? error.message : '候补确认失败',
+    })
+  }
+})
+
+router.put('/:id/skip', (req: Request, res: Response): void => {
+  try {
+    const { waitlistService } = (req.app.locals as AppLocals).services
+    const { id } = req.params
+    const { skipReason } = req.body as { skipReason: string }
+
+    if (!skipReason) {
+      res.status(400).json({
+        success: false,
+        message: '缺少必要参数：skipReason',
+      })
+      return
+    }
+
+    const result = waitlistService.skipWaitlistItem(id, skipReason)
+
+    if (!result.success) {
+      res.status(400).json({
+        success: false,
+        message: result.message,
+      })
+      return
+    }
+
+    res.json({
+      success: true,
+      data: { nextItem: result.nextItem },
+      message: result.message,
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '跳过候补失败',
     })
   }
 })

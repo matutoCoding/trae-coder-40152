@@ -1,6 +1,7 @@
 import type {
   Platform, Shipper, Reservation, WaitlistItem, Worker,
-  QuotaLog, SystemSettings, CreateReservationReq, QuotaOverview
+  QuotaLog, SystemSettings, CreateReservationReq, QuotaOverview,
+  QuotaAdjustment, OperationLog
 } from '../../shared/types';
 
 interface ApiResponse<T> {
@@ -30,7 +31,7 @@ export const api = {
     remove: (id: string) => request<void>(`/api/platforms/${id}`, { method: 'DELETE' }),
   },
   reservations: {
-    list: (params?: { date?: string; platformId?: string; status?: string }) => {
+    list: (params?: { date?: string; startDate?: string; endDate?: string; platformId?: string; status?: string }) => {
       const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
       return request<Reservation[]>(`/api/reservations${qs}`);
     },
@@ -44,6 +45,7 @@ export const api = {
     list: () => request<WaitlistItem[]>('/api/waitlist'),
     create: (data: Partial<WaitlistItem>) => request<WaitlistItem>('/api/waitlist', { method: 'POST', body: JSON.stringify(data) }),
     confirm: (id: string) => request<{ success: boolean; reservation?: Reservation }>(`/api/waitlist/${id}/confirm`, { method: 'PUT' }),
+    skip: (id: string, reason?: string) => request<WaitlistItem>(`/api/waitlist/${id}/skip`, { method: 'PUT', body: JSON.stringify({ reason }) }),
     remove: (id: string) => request<void>(`/api/waitlist/${id}`, { method: 'DELETE' }),
   },
   quota: {
@@ -54,6 +56,18 @@ export const api = {
       return request<QuotaLog[]>(`/api/quota/logs${qs}`);
     },
   },
+  quotaAdjustments: {
+    list: (params?: { status?: string; shipperId?: string }) => {
+      const qs = params ? '?' + new URLSearchParams(params as any).toString() : '';
+      return request<QuotaAdjustment[]>(`/api/quota-adjustments${qs}`);
+    },
+    create: (data: { shipperId: string; type: 'increase' | 'decrease'; amount: number; reason: string; applicant: string }) =>
+      request<QuotaAdjustment>('/api/quota-adjustments', { method: 'POST', body: JSON.stringify(data) }),
+    approve: (id: string, approver: string) =>
+      request<QuotaAdjustment>(`/api/quota-adjustments/${id}/approve`, { method: 'PUT', body: JSON.stringify({ approver }) }),
+    reject: (id: string, approver: string, rejectReason: string) =>
+      request<QuotaAdjustment>(`/api/quota-adjustments/${id}/reject`, { method: 'PUT', body: JSON.stringify({ approver, rejectReason }) }),
+  },
   workers: {
     list: () => request<Worker[]>('/api/workers'),
     create: (data: Partial<Worker>) => request<Worker>('/api/workers', { method: 'POST', body: JSON.stringify(data) }),
@@ -62,5 +76,8 @@ export const api = {
   settings: {
     get: () => request<SystemSettings>('/api/settings'),
     update: (data: Partial<SystemSettings>) => request<SystemSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(data) }),
+  },
+  operationLogs: {
+    getByReservation: (reservationId: string) => request<OperationLog[]>(`/api/operation-logs/${reservationId}`),
   },
 };

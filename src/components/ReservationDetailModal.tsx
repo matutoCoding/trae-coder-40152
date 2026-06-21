@@ -1,15 +1,27 @@
 import { useState, useEffect } from 'react';
-import { X, Truck, Package, Clock, Check, XCircle, PlayCircle, Users } from 'lucide-react';
+import { X, Truck, Package, Clock, Check, XCircle, PlayCircle, Users, History, Dot } from 'lucide-react';
 import { useAppStore } from '../store/appStore';
 import { api } from '../lib/api';
 import StatusBadge from './StatusBadge';
-import type { Reservation, Platform, Shipper, Worker } from '../../shared/types';
+import type { Reservation, Platform, Shipper, Worker, OperationLog } from '../../shared/types';
+import { cn } from '../lib/utils';
 
 interface Props {
   open: boolean;
   onClose: () => void;
   reservation: Reservation | null;
 }
+
+const actionColorMap: Record<OperationLog['action'], string> = {
+  create: 'bg-primary-500/10 text-primary-500 border-primary-500/30',
+  confirm: 'bg-success/10 text-success border-success/30',
+  start_loading: 'bg-accent-500/10 text-accent-500 border-accent-500/30',
+  complete: 'bg-success/10 text-success border-success/30',
+  cancel: 'bg-neutral-200 text-neutral-600 border-neutral-300',
+  timeout: 'bg-danger/10 text-danger border-danger/30',
+  assign_workers: 'bg-accent-500/10 text-accent-500 border-accent-500/30',
+  waitlist_convert: 'bg-warning/15 text-warning-700 border-warning/40',
+};
 
 export default function ReservationDetailModal({ open, onClose, reservation }: Props) {
   const platforms = useAppStore((s) => s.platforms);
@@ -22,12 +34,25 @@ export default function ReservationDetailModal({ open, onClose, reservation }: P
   const setLoading = useAppStore((s) => s.setLoading);
 
   const [selectedWorkerIds, setSelectedWorkerIds] = useState<string[]>([]);
+  const [logs, setLogs] = useState<OperationLog[]>([]);
 
   useEffect(() => {
     if (open && reservation) {
       setSelectedWorkerIds(reservation.workerIds || []);
+      fetchLogs(reservation.id);
     }
   }, [open, reservation]);
+
+  const fetchLogs = async (reservationId: string) => {
+    try {
+      const res = await api.operationLogs.getByReservation(reservationId);
+      if (res.success && res.data) {
+        setLogs(res.data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+      }
+    } catch (e) {
+      console.error('Failed to fetch operation logs', e);
+    }
+  };
 
   if (!open || !reservation) return null;
 
@@ -271,6 +296,52 @@ export default function ReservationDetailModal({ open, onClose, reservation }: P
               )}
             </div>
           )}
+
+          <div className="border-t border-neutral-200 pt-4">
+            <div className="flex items-center gap-2 mb-4">
+              <History className="w-4 h-4 text-neutral-600" />
+              <span className="text-sm font-medium text-neutral-700">操作日志</span>
+            </div>
+            {logs.length === 0 ? (
+              <div className="py-8 text-center text-neutral-400 text-sm">
+                暂无操作日志
+              </div>
+            ) : (
+              <div className="relative space-y-4 max-h-64 overflow-y-auto pr-1">
+                {logs.map((log, index) => (
+                  <div key={log.id} className="flex gap-3">
+                    <div className="relative flex flex-col items-center">
+                      <div className={cn(
+                        'w-3 h-3 rounded-full ring-2 ring-white z-10',
+                        index === 0 ? 'bg-primary-500' : 'bg-neutral-300'
+                      )} />
+                      {index < logs.length - 1 && (
+                        <div className="w-0.5 bg-neutral-200 flex-1 mt-1" />
+                      )}
+                    </div>
+                    <div className="flex-1 pb-2">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className={cn(
+                          'text-xs px-2 py-0.5 rounded-full border font-medium',
+                          actionColorMap[log.action] || 'bg-neutral-100 text-neutral-600 border-neutral-200'
+                        )}>
+                          {log.actionLabel || log.action}
+                        </span>
+                        <span className="text-xs text-neutral-500">
+                          {log.operator}
+                          <span className="text-neutral-300 mx-1">·</span>
+                          {formatTime(log.createdAt)}
+                        </span>
+                      </div>
+                      {log.detail && (
+                        <p className="text-xs text-neutral-500">{log.detail}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 px-5 py-4 border-t border-neutral-200 bg-neutral-50">
