@@ -2,6 +2,7 @@ import type { Reservation } from '../../shared/types.js';
 import { DataStore } from '../store/dataStore.js';
 import { QuotaService } from './QuotaService.js';
 import { WaitlistService } from './WaitlistService.js';
+import { OperationLogService } from './OperationLogService.js';
 
 const CHECK_INTERVAL = 30 * 1000;
 
@@ -11,28 +12,36 @@ export class TimeoutScheduler {
   private store: DataStore;
   private quotaService: QuotaService;
   private waitlistService: WaitlistService;
+  private operationLogService: OperationLogService;
   private intervalId: ReturnType<typeof setInterval> | null = null;
 
   private constructor(
     store: DataStore,
     quotaService: QuotaService,
-    waitlistService: WaitlistService
+    waitlistService: WaitlistService,
+    operationLogService: OperationLogService
   ) {
     this.store = store;
     this.quotaService = quotaService;
     this.waitlistService = waitlistService;
+    this.operationLogService = operationLogService;
   }
 
   static getInstance(
     store: DataStore,
     quotaService: QuotaService,
-    waitlistService: WaitlistService
+    waitlistService: WaitlistService,
+    operationLogService?: OperationLogService
   ): TimeoutScheduler {
     if (!TimeoutScheduler.instance) {
+      if (!operationLogService) {
+        throw new Error('OperationLogService is required to initialize TimeoutScheduler');
+      }
       TimeoutScheduler.instance = new TimeoutScheduler(
         store,
         quotaService,
-        waitlistService
+        waitlistService,
+        operationLogService
       );
     }
     return TimeoutScheduler.instance;
@@ -105,6 +114,13 @@ export class TimeoutScheduler {
 
       await this.waitlistService.notifyWaitlistForSlot(reservation);
       this.store.emit('reservations:change', reservation);
+
+      this.operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'timeout',
+        operator: 'system',
+        detail: '超时未到港，自动释放'
+      });
     }
 
     if (timeoutIds.length > 0) {

@@ -18,19 +18,20 @@ interface AppLocals {
       confirmWaitlistItem: (
         waitlistId: string
       ) => Promise<{ success: boolean; message: string; reservation?: unknown }>
-      skipWaitlistItem: (
+      skipAndNotifyNext: (
         waitlistId: string,
-        skipReason: string
-      ) => { success: boolean; message: string; nextItem?: WaitlistItem | null }
+        skipReason?: string
+      ) => Promise<{ success: boolean; message: string; nextItem?: WaitlistItem | null }>
       cancelWaitlistItem: (waitlistId: string) => { success: boolean; message: string }
     }
     operationLogService?: {
-      addLog: (
-        reservationId: string,
-        action: string,
-        operator: string,
+      addLog: (params: {
+        reservationId: string
+        action: 'create' | 'confirm' | 'start_loading' | 'complete' | 'cancel' | 'timeout' | 'assign_workers' | 'waitlist_convert'
+        operator: string
+        operatorRole?: string
         detail?: string
-      ) => unknown
+      }) => unknown
     }
   }
 }
@@ -123,12 +124,12 @@ router.put('/:id/confirm', async (req: Request, res: Response): Promise<void> =>
 
     if (result.reservation && operationLogService) {
       const reservation = result.reservation as { id: string }
-      operationLogService.addLog(
-        reservation.id,
-        'waitlist_convert',
-        'scheduler',
-        '候补确认转正式预约'
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'waitlist_convert',
+        operator: 'scheduler',
+        detail: '候补确认转正式预约'
+      })
     }
 
     res.json({
@@ -144,21 +145,16 @@ router.put('/:id/confirm', async (req: Request, res: Response): Promise<void> =>
   }
 })
 
-router.put('/:id/skip', (req: Request, res: Response): void => {
+router.put('/:id/skip', async (req: Request, res: Response): Promise<void> => {
   try {
     const { waitlistService } = (req.app.locals as AppLocals).services
     const { id } = req.params
-    const { skipReason } = req.body as { skipReason: string }
+    const { skipReason } = req.body as { skipReason?: string }
 
-    if (!skipReason) {
-      res.status(400).json({
-        success: false,
-        message: '缺少必要参数：skipReason',
-      })
-      return
-    }
-
-    const result = waitlistService.skipWaitlistItem(id, skipReason)
+    const result = await waitlistService.skipAndNotifyNext(
+      id,
+      skipReason || '用户主动跳过'
+    )
 
     if (!result.success) {
       res.status(400).json({

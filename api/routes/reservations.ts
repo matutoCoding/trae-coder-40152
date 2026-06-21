@@ -24,12 +24,15 @@ interface AppLocals {
       notifyWaitlistForSlot: (reservation: Reservation) => Promise<unknown>
     }
     operationLogService?: {
-      addLog: (
-        reservationId: string,
-        action: string,
-        operator: string,
+      addLog: (params: {
+        reservationId: string
+        action: 'create' | 'confirm' | 'start_loading' | 'complete' | 'cancel' | 'timeout' | 'assign_workers' | 'waitlist_convert'
+        operator: string
+        operatorRole?: string
         detail?: string
-      ) => unknown
+        beforeStatus?: string
+        afterStatus?: string
+      }) => unknown
     }
   }
 }
@@ -203,12 +206,12 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     store.emit('reservations:change', reservation)
 
     if (operationLogService) {
-      operationLogService.addLog(
-        reservation.id,
-        'create',
-        'shipper',
-        '创建预约'
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'create',
+        operator: 'shipper',
+        detail: '创建预约'
+      })
     }
 
     res.json({
@@ -252,12 +255,12 @@ router.put('/:id/confirm', (req: Request, res: Response): void => {
     store.emit('reservations:change', reservation)
 
     if (operationLogService) {
-      operationLogService.addLog(
-        reservation.id,
-        'confirm',
-        'scheduler',
-        '确认到港'
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'confirm',
+        operator: 'scheduler',
+        detail: '确认到港'
+      })
     }
 
     res.json({
@@ -330,12 +333,12 @@ router.put('/:id/complete', async (req: Request, res: Response): Promise<void> =
     store.emit('reservations:change', reservation)
 
     if (operationLogService) {
-      operationLogService.addLog(
-        reservation.id,
-        'complete',
-        'scheduler',
-        '完成装卸'
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'complete',
+        operator: 'scheduler',
+        detail: '完成装卸'
+      })
     }
 
     res.json({
@@ -406,12 +409,12 @@ router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => 
     store.emit('reservations:change', reservation)
 
     if (operationLogService) {
-      operationLogService.addLog(
-        reservation.id,
-        'cancel',
-        'scheduler',
-        '取消预约'
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'cancel',
+        operator: 'scheduler',
+        detail: '取消预约'
+      })
     }
 
     res.json({
@@ -472,6 +475,11 @@ router.put('/:id/assign', (req: Request, res: Response): void => {
 
     reservation.workerIds = workerIds
 
+    const wasLoading = reservation.status === 'loading'
+    if (reservation.status === 'confirmed') {
+      reservation.status = 'loading'
+    }
+
     for (const wid of workerIds) {
       const worker = store.workers.find((w) => w.id === wid);
       if (worker && worker.status !== 'leave') {
@@ -486,12 +494,20 @@ router.put('/:id/assign', (req: Request, res: Response): void => {
       const workerNames = workerIds
         .map((wid) => store.workers.find((w) => w.id === wid)?.name || wid)
         .join(', ')
-      operationLogService.addLog(
-        reservation.id,
-        'assign_workers',
-        'scheduler',
-        `指派了${workerIds.length}名工人：${workerNames}`
-      )
+      operationLogService.addLog({
+        reservationId: reservation.id,
+        action: 'assign_workers',
+        operator: 'scheduler',
+        detail: `指派了${workerIds.length}名工人：${workerNames}`
+      })
+      if (!wasLoading && reservation.status === 'loading') {
+        operationLogService.addLog({
+          reservationId: reservation.id,
+          action: 'start_loading',
+          operator: 'scheduler',
+          detail: '开始装卸作业'
+        })
+      }
     }
 
     res.json({

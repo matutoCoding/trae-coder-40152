@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { X, User, Clock } from 'lucide-react';
 import type { Reservation, Worker, Platform, Shipper } from '../../shared/types';
 import { useAppStore } from '../store/appStore';
@@ -23,7 +23,13 @@ export default function DispatchModal({ open, onClose, reservation }: Props) {
   const fetchReservations = useAppStore(s => s.fetchReservations);
   const fetchWorkers = useAppStore(s => s.fetchWorkers);
 
-  if (!open || !reservation) return null;
+  useEffect(() => {
+    if (open) {
+      setSelectedIds([]);
+      setSelectedGroup('all');
+      setSubmitting(false);
+    }
+  }, [open, reservation?.id]);
 
   const groups = useMemo(() => {
     const groupSet = new Set(workers.map(w => w.group));
@@ -37,6 +43,9 @@ export default function DispatchModal({ open, onClose, reservation }: Props) {
     }
     return result;
   }, [workers, selectedGroup]);
+
+  if (!open || !reservation) return null;
+
   const platform = platforms.find(p => p.id === reservation.platformId);
   const shipper = quotaOverview?.shippers.find(s => s.id === reservation.shipperId);
 

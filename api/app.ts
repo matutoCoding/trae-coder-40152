@@ -40,8 +40,8 @@ const dataStore = DataStore.getInstance()
 const lockManager = new LockManager()
 const quotaService = new QuotaService(dataStore, lockManager)
 const waitlistService = new WaitlistService(dataStore, quotaService)
-const timeoutScheduler = TimeoutScheduler.getInstance(dataStore, quotaService, waitlistService)
 const operationLogService = new OperationLogService(dataStore)
+const timeoutScheduler = TimeoutScheduler.getInstance(dataStore, quotaService, waitlistService, operationLogService)
 const quotaApprovalService = new QuotaApprovalService(dataStore, quotaService)
 
 app.locals.services = {

@@ -45,7 +45,7 @@ export const api = {
     list: () => request<WaitlistItem[]>('/api/waitlist'),
     create: (data: Partial<WaitlistItem>) => request<WaitlistItem>('/api/waitlist', { method: 'POST', body: JSON.stringify(data) }),
     confirm: (id: string) => request<{ success: boolean; reservation?: Reservation }>(`/api/waitlist/${id}/confirm`, { method: 'PUT' }),
-    skip: (id: string, reason?: string) => request<WaitlistItem>(`/api/waitlist/${id}/skip`, { method: 'PUT', body: JSON.stringify({ reason }) }),
+    skip: (id: string, skipReason: string = '用户主动跳过') => request<WaitlistItem>(`/api/waitlist/${id}/skip`, { method: 'PUT', body: JSON.stringify({ skipReason }) }),
     remove: (id: string) => request<void>(`/api/waitlist/${id}`, { method: 'DELETE' }),
   },
   quota: {
