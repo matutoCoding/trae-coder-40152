@@ -1,0 +1,374 @@
+import { Router, type Request, type Response } from 'express'
+import type { Reservation, CreateReservationReq } from '../../shared/types.js'
+import { DataStore } from '../store/dataStore.js'
+
+const router = Router()
+
+interface AppLocals {
+  services: {
+    quotaService: {
+      deductQuota: (
+        shipperId: string,
+        amount: number,
+        reservationId: string,
+        operator: string
+      ) => Promise<{ success: boolean; message: string; data?: unknown }>
+      releaseQuota: (
+        shipperId: string,
+        amount: number,
+        reservationId: string,
+        operator: string
+      ) => Promise<{ success: boolean; message: string }>
+    }
+    waitlistService: {
+      notifyWaitlistForSlot: (reservation: Reservation) => Promise<unknown>
+    }
+  }
+}
+
+router.get('/', (req: Request, res: Response): void => {
+  try {
+    const store = DataStore.getInstance()
+    const { date, platformId, status } = req.query
+
+    let reservations = [...store.reservations]
+
+    if (date) {
+      const targetDate = new Date(date as string).toDateString()
+      reservations = reservations.filter(
+        (r) => new Date(r.startTime).toDateString() === targetDate
+      )
+    }
+
+    if (platformId) {
+      reservations = reservations.filter((r) => r.platformId === platformId)
+    }
+
+    if (status) {
+      const statusList = (status as string).split(',')
+      reservations = reservations.filter((r) => statusList.includes(r.status))
+    }
+
+    res.json({
+      success: true,
+      data: reservations,
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '获取预约列表失败',
+    })
+  }
+})
+
+router.post('/', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const store = DataStore.getInstance()
+    const { quotaService } = (req.app.locals as AppLocals).services
+    const body: CreateReservationReq = req.body
+
+    const {
+      platformId,
+      shipperId,
+      startTime,
+      endTime,
+      vehicleNo,
+      vehicleType,
+      cargoType,
+      cargoWeight,
+      workerIds,
+    } = body
+
+    if (
+      !platformId ||
+      !shipperId ||
+      !startTime ||
+      !endTime ||
+      !vehicleNo ||
+      !vehicleType ||
+      !cargoType
+    ) {
+      res.status(400).json({
+        success: false,
+        message: '缺少必要参数',
+      })
+      return
+    }
+
+    const platform = store.platforms.find((p) => p.id === platformId)
+    if (!platform) {
+      res.status(400).json({
+        success: false,
+        message: '月台不存在',
+      })
+      return
+    }
+
+    const shipper = store.shippers.find((s) => s.id === shipperId)
+    if (!shipper) {
+      res.status(400).json({
+        success: false,
+        message: '发货方不存在',
+      })
+      return
+    }
+
+    const reservation: Reservation = {
+      id: `r${Date.now()}${Math.random().toString(36).slice(2, 8)}`,
+      platformId,
+      shipperId,
+      startTime,
+      endTime,
+      vehicleNo,
+      vehicleType,
+      cargoType,
+      cargoWeight: cargoWeight ?? 0,
+      status: 'pending',
+      workerIds,
+      createdAt: new Date().toISOString(),
+    }
+
+    const deductResult = await quotaService.deductQuota(
+      shipperId,
+      1,
+      reservation.id,
+      'api'
+    )
+
+    if (!deductResult.success) {
+      res.status(400).json({
+        success: false,
+        message: deductResult.message,
+      })
+      return
+    }
+
+    store.reservations.push(reservation)
+    store.emit('reservations:change', reservation)
+
+    res.json({
+      success: true,
+      data: reservation,
+      message: '预约创建成功',
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '创建预约失败',
+    })
+  }
+})
+
+router.put('/:id/confirm', (req: Request, res: Response): void => {
+  try {
+    const store = DataStore.getInstance()
+    const { id } = req.params
+
+    const reservation = store.reservations.find((r) => r.id === id)
+    if (!reservation) {
+      res.status(404).json({
+        success: false,
+        message: '预约不存在',
+      })
+      return
+    }
+
+    if (reservation.status !== 'pending') {
+      res.status(400).json({
+        success: false,
+        message: `当前状态为 ${reservation.status}，无法确认到港`,
+      })
+      return
+    }
+
+    reservation.status = 'confirmed'
+    reservation.arrivedAt = new Date().toISOString()
+    store.emit('reservations:change', reservation)
+
+    res.json({
+      success: true,
+      data: reservation,
+      message: '车辆已确认到港',
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '确认到港失败',
+    })
+  }
+})
+
+router.put('/:id/complete', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const store = DataStore.getInstance()
+    const { quotaService, waitlistService } = (req.app.locals as AppLocals).services
+    const { id } = req.params
+
+    const reservation = store.reservations.find((r) => r.id === id)
+    if (!reservation) {
+      res.status(404).json({
+        success: false,
+        message: '预约不存在',
+      })
+      return
+    }
+
+    if (!['confirmed', 'loading'].includes(reservation.status)) {
+      res.status(400).json({
+        success: false,
+        message: `当前状态为 ${reservation.status}，无法完成装卸`,
+      })
+      return
+    }
+
+    reservation.status = 'completed'
+    reservation.completedAt = new Date().toISOString()
+
+    const releaseResult = await quotaService.releaseQuota(
+      reservation.shipperId,
+      1,
+      reservation.id,
+      'api'
+    )
+
+    if (!releaseResult.success) {
+      res.status(500).json({
+        success: false,
+        message: releaseResult.message,
+      })
+      return
+    }
+
+    await waitlistService.notifyWaitlistForSlot(reservation)
+
+    store.emit('reservations:change', reservation)
+
+    res.json({
+      success: true,
+      data: reservation,
+      message: '装卸已完成',
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '完成装卸失败',
+    })
+  }
+})
+
+router.put('/:id/cancel', async (req: Request, res: Response): Promise<void> => {
+  try {
+    const store = DataStore.getInstance()
+    const { quotaService, waitlistService } = (req.app.locals as AppLocals).services
+    const { id } = req.params
+
+    const reservation = store.reservations.find((r) => r.id === id)
+    if (!reservation) {
+      res.status(404).json({
+        success: false,
+        message: '预约不存在',
+      })
+      return
+    }
+
+    if (reservation.status === 'completed' || reservation.status === 'cancelled') {
+      res.status(400).json({
+        success: false,
+        message: `当前状态为 ${reservation.status}，无法取消`,
+      })
+      return
+    }
+
+    reservation.status = 'cancelled'
+
+    const releaseResult = await quotaService.releaseQuota(
+      reservation.shipperId,
+      1,
+      reservation.id,
+      'api'
+    )
+
+    if (!releaseResult.success) {
+      res.status(500).json({
+        success: false,
+        message: releaseResult.message,
+      })
+      return
+    }
+
+    await waitlistService.notifyWaitlistForSlot(reservation)
+
+    store.emit('reservations:change', reservation)
+
+    res.json({
+      success: true,
+      data: reservation,
+      message: '预约已取消',
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '取消预约失败',
+    })
+  }
+})
+
+router.put('/:id/assign', (req: Request, res: Response): void => {
+  try {
+    const store = DataStore.getInstance()
+    const { id } = req.params
+    const { workerIds } = req.body as { workerIds: string[] }
+
+    if (!Array.isArray(workerIds)) {
+      res.status(400).json({
+        success: false,
+        message: 'workerIds 必须是数组',
+      })
+      return
+    }
+
+    const reservation = store.reservations.find((r) => r.id === id)
+    if (!reservation) {
+      res.status(404).json({
+        success: false,
+        message: '预约不存在',
+      })
+      return
+    }
+
+    if (reservation.status === 'completed' || reservation.status === 'cancelled') {
+      res.status(400).json({
+        success: false,
+        message: `当前状态为 ${reservation.status}，无法指派装卸工`,
+      })
+      return
+    }
+
+    for (const wid of workerIds) {
+      const worker = store.workers.find((w) => w.id === wid)
+      if (!worker) {
+        res.status(400).json({
+          success: false,
+          message: `装卸工 ${wid} 不存在`,
+        })
+        return
+      }
+    }
+
+    reservation.workerIds = workerIds
+    store.emit('reservations:change', reservation)
+
+    res.json({
+      success: true,
+      data: reservation,
+      message: '装卸工指派成功',
+    })
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : '指派装卸工失败',
+    })
+  }
+})
+
+export default router
